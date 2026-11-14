@@ -9,6 +9,12 @@ Conversor de divisas para Android con tipo de cambio actualizado, hecho en Kotli
 - Material You (colores del wallpaper) en Android 12+
 - Animaciones con resortes de rebote: entrada escalonada, botón de intercambio que gira y empuja las tarjetas, números que "ruedan", transiciones entre pantallas
 
+## Más funciones
+- **Actualizador:** revisa los releases de este repo y descarga/instala la versión nueva desde la app (también en Acerca de → Actualizaciones).
+- **Historial:** gráfica de 7 días, 1 mes, 6 meses o 1 año (tipos de referencia del BCE vía Frankfurter), con animación de trazo y arrastre para ver cada día.
+- **Widget:** tu par de monedas en la pantalla de inicio, con Material You y botón de refrescar (Glance).
+- **Regreso predictivo:** en Android 14+ la pantalla se encoge y sigue tu dedo al deslizar para regresar.
+
 ## Ajustes
 - **Color del tema:** 8 paletas (generadas en tonos tipo HCT a partir de un hue) + colores del wallpaper en Android 12+. El cambio de color se anima en toda la app.
 - **Modo oscuro:** activado por defecto.

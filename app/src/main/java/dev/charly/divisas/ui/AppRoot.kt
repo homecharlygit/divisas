@@ -1,6 +1,16 @@
 package dev.charly.divisas.ui
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.animateDp
@@ -57,7 +67,35 @@ fun AppRoot(vm: ConverterViewModel) {
     ) {
         DivisasTheme(palette = settings.palette, dark = settings.dark) {
             var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
-            BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
+            // ---------- Gesto de regreso predictivo (Android 14+) ----------
+            // Mientras deslizas, la pantalla se encoge, se redondea y se corre hacia el lado del gesto.
+            // En versiones anteriores funciona como un "atrás" normal.
+            val backProgress = remember { Animatable(0f) }
+            var backEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+            val scope = rememberCoroutineScope()
+            PredictiveBackHandler(enabled = screen != Screen.HOME) { events ->
+                var armed = false
+                try {
+                    events.collect { e ->
+                        backEdge = e.swipeEdge
+                        backProgress.snapTo(e.progress)
+                        // Un tick al pasar el punto en que soltar ya regresa, y otro si te arrepientes
+                        val nowArmed = e.progress > 0.35f
+                        if (nowArmed != armed) {
+                            armed = nowArmed
+                            haptics.tick(if (nowArmed) 0.7f else 0.3f)
+                        }
+                    }
+                    screen = Screen.HOME
+                    scope.launch {
+                        delay(500)
+                        backProgress.snapTo(0f)
+                    }
+                } catch (e: CancellationException) {
+                    scope.launch { backProgress.animateTo(0f, Motion.bouncy()) }
+                    throw e
+                }
+            }
             // Avanzar se siente como "subir" y regresar como "bajar"
             var previous by remember { mutableStateOf(screen) }
             LaunchedEffect(screen) {
@@ -67,7 +105,17 @@ fun AppRoot(vm: ConverterViewModel) {
                 }
             }
 
-            Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+            val backdrop = MaterialTheme.colorScheme.surfaceContainerHighest
+            Surface(
+                color = MaterialTheme.colorScheme.background,
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Detrás de la pantalla que se encoge se asoma un fondo más claro
+                    .drawBehind {
+                        val p = backProgress.value
+                        if (p > 0f) drawRect(backdrop.copy(alpha = p.coerceIn(0f, 1f)))
+                    },
+            ) {
                 AnimatedContent(
                     targetState = screen,
                     transitionSpec = {
@@ -90,7 +138,19 @@ fun AppRoot(vm: ConverterViewModel) {
                         transitionSpec = { spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow) },
                         label = "screenBlur",
                     ) { state -> if (state == EnterExitState.Visible) 0.dp else 24.dp }
-                    Box(Modifier.fillMaxSize().appBlur(blur)) {
+                    val predictive = if (target != Screen.HOME) {
+                        Modifier.graphicsLayer {
+                            val p = backProgress.value.coerceIn(0f, 1f)
+                            val sc = 1f - 0.12f * p
+                            scaleX = sc
+                            scaleY = sc
+                            val dir = if (backEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
+                            translationX = dir * size.width * 0.05f * p
+                            shape = RoundedCornerShape((40 * p).dp)
+                            clip = p > 0f
+                        }
+                    } else Modifier
+                    Box(Modifier.fillMaxSize().then(predictive).appBlur(blur)) {
                     when (target) {
                         Screen.HOME -> ConverterScreen(
                             vm = vm,
@@ -98,7 +158,7 @@ fun AppRoot(vm: ConverterViewModel) {
                             onOpenAbout = { screen = Screen.ABOUT },
                         )
                         Screen.SETTINGS -> SettingsScreen(vm = vm, onBack = { screen = Screen.HOME })
-                        Screen.ABOUT -> AboutScreen(onBack = { screen = Screen.HOME })
+                        Screen.ABOUT -> AboutScreen(vm = vm, onBack = { screen = Screen.HOME })
                     }
                     }
                 }

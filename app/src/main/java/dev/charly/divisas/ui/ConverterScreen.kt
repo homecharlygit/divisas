@@ -7,7 +7,9 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
@@ -167,6 +169,22 @@ fun ConverterScreen(
                 bottom = pad.calculateBottomPadding() + 24.dp,
             ),
         ) {
+            item(key = "update") {
+                val up = vm.updateUi
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = up.info != null && !up.dismissed,
+                    enter = expandVertically(Motion.bouncy()) + fadeIn() + scaleIn(Motion.bouncy(), initialScale = 0.9f),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    UpdateBanner(
+                        update = up,
+                        str = str,
+                        onUpdate = vm::downloadAndInstall,
+                        onLater = vm::dismissUpdate,
+                        modifier = Modifier.padding(bottom = 12.dp),
+                    )
+                }
+            }
             item {
                 ConverterCards(
                     s = s,
@@ -212,6 +230,19 @@ fun ConverterScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+            }
+
+            item(key = "history") {
+                HistoryCard(
+                    history = vm.history,
+                    from = s.from,
+                    to = s.to,
+                    str = str,
+                    locale = locale,
+                    onRange = vm::setHistoryRange,
+                    onRetry = vm::loadHistory,
+                    modifier = Modifier.padding(top = 16.dp).staggeredEnter(2, intro),
+                )
             }
 
             item {

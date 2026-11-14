@@ -59,7 +59,7 @@ private const val LICENSE_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
+fun AboutScreen(vm: ConverterViewModel, onBack: () -> Unit) {
     val str = LocalStrings.current
     val colors = MaterialTheme.colorScheme
     val context = LocalContext.current
@@ -115,6 +115,62 @@ fun AboutScreen(onBack: () -> Unit) {
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 8.dp, start = 24.dp, end = 24.dp),
                     )
+                }
+            }
+
+            // ---------- Actualizaciones ----------
+            item { SectionHeader(str.updatesTitle, Modifier.staggeredEnter(1)) }
+            item {
+                val up = vm.updateUi
+                val haptics = LocalHaptics.current
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = colors.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth().staggeredEnter(1),
+                ) {
+                    Column(Modifier.padding(20.dp)) {
+                        Text(
+                            str.installedVersion(vm.updates.currentVersion),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            when {
+                                up.checking -> str.checking
+                                up.info != null -> str.updateAvailable(up.info.version)
+                                up.error -> str.updateError
+                                up.upToDate -> str.upToDate
+                                else -> ""
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (up.error) colors.error else colors.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (up.info != null) {
+                                Button(onClick = { haptics.rise(); vm.downloadAndInstall() }) {
+                                    Text(
+                                        when {
+                                            up.progress != null -> str.downloading(
+                                                if (up.progress < 0) -1 else (up.progress * 100).toInt()
+                                            )
+                                            up.file != null -> str.install
+                                            else -> str.updateNow
+                                        }
+                                    )
+                                }
+                            } else {
+                                FilledTonalButton(
+                                    onClick = {
+                                        haptics.click()
+                                        vm.checkForUpdates()
+                                    },
+                                    enabled = !up.checking,
+                                ) { Text(if (up.checking) str.checking else str.checkUpdates) }
+                            }
+                        }
+                    }
                 }
             }
 

@@ -7,7 +7,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.charly.divisas.data.HistoryPoint
+import dev.charly.divisas.data.HistoryRange
+import dev.charly.divisas.data.HistoryRepository
 import dev.charly.divisas.data.RatesRepository
+import dev.charly.divisas.data.UpdateInfo
+import dev.charly.divisas.data.UpdateRepository
+import dev.charly.divisas.widget.RateWidget
+import androidx.glance.appwidget.updateAll
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import java.io.File
 import dev.charly.divisas.ui.i18n.AppLanguage
 import dev.charly.divisas.ui.theme.DEFAULT_PALETTE
 import kotlinx.coroutines.launch
@@ -49,11 +59,35 @@ data class AppSettings(
     val hapticStrength: Float,
 )
 
+data class HistoryUi(
+    val range: HistoryRange = HistoryRange.MONTH,
+    val pair: String = "",
+    val points: List<HistoryPoint> = emptyList(),
+    val loading: Boolean = false,
+    val unsupported: Boolean = false,
+    val error: Boolean = false,
+)
+
+data class UpdateUi(
+    val info: UpdateInfo? = null,
+    val checking: Boolean = false,
+    /** null = sin descarga, 0..1 progreso, -1 tamaño desconocido */
+    val progress: Float? = null,
+    val file: File? = null,
+    val error: Boolean = false,
+    val upToDate: Boolean = false,
+    val dismissed: Boolean = false,
+    val needsPermission: Boolean = false,
+)
+
 val FAVORITES = listOf("MXN", "USD", "EUR", "CAD", "GBP", "JPY", "CNY", "BRL", "COP", "ARS")
 
 class ConverterViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = RatesRepository(app)
+    private val historyRepo = HistoryRepository()
+    val updates = UpdateRepository(app)
+    private var historyJob: Job? = null
     private val prefs = app.getSharedPreferences("prefs", Context.MODE_PRIVATE)
     private var lastFetchMillis = 0L
 
@@ -108,11 +142,99 @@ class ConverterViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString("blur", type.code).apply()
     }
 
+    var history by mutableStateOf(HistoryUi())
+        private set
+
+    var updateUi by mutableStateOf(UpdateUi())
+        private set
+
     init {
         repo.cached()?.let {
             state = state.copy(rates = it.rates, updatedMillis = it.updatedMillis, source = it.source)
         }
         refresh()
+        loadHistory()
+        // Busca actualizaciones solo si pasaron más de 6 horas desde la última vez
+        if (System.currentTimeMillis() - updates.lastCheckMillis() > 6 * 60 * 60 * 1000L) checkForUpdates()
+    }
+
+    // ---------------- Historial ----------------
+
+    fun setHistoryRange(range: HistoryRange) {
+        if (range == history.range) return
+        history = history.copy(range = range)
+        loadHistory()
+    }
+
+    fun loadHistory() {
+        val from = state.from
+        val to = state.to
+        historyJob?.cancel()
+        if (!historyRepo.supports(from, to)) {
+            history = history.copy(pair = "$from/$to", points = emptyList(), loading = false, unsupported = true, error = false)
+            return
+        }
+        history = history.copy(loading = true, unsupported = false, error = false)
+        val range = history.range
+        historyJob = viewModelScope.launch {
+            history = try {
+                history.copy(pair = "$from/$to", points = historyRepo.load(from, to, range), loading = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                history.copy(loading = false, error = true)
+            }
+        }
+    }
+
+    // ---------------- Actualizaciones ----------------
+
+    fun checkForUpdates() {
+        if (updateUi.checking) return
+        updateUi = updateUi.copy(checking = true, error = false, upToDate = false)
+        viewModelScope.launch {
+            updateUi = try {
+                val info = updates.check()
+                updateUi.copy(info = info, checking = false, upToDate = info == null, dismissed = false)
+            } catch (e: Exception) {
+                updateUi.copy(checking = false, error = true)
+            }
+        }
+    }
+
+    fun dismissUpdate() {
+        updateUi = updateUi.copy(dismissed = true)
+    }
+
+    /** Descarga el APK y al terminar abre el instalador. */
+    fun downloadAndInstall() {
+        val info = updateUi.info ?: return
+        updateUi.file?.let { if (it.exists()) { install(it); return } }
+        if (updateUi.progress != null) return
+        updateUi = updateUi.copy(progress = 0f, error = false)
+        viewModelScope.launch {
+            try {
+                val file = updates.download(info) { p -> updateUi = updateUi.copy(progress = p) }
+                updateUi = updateUi.copy(progress = null, file = file)
+                install(file)
+            } catch (e: Exception) {
+                updateUi = updateUi.copy(progress = null, error = true)
+            }
+        }
+    }
+
+    private fun install(file: File) {
+        if (!updates.canInstall()) {
+            updateUi = updateUi.copy(needsPermission = true)
+            updates.openInstallPermissionSettings()
+        } else {
+            updateUi = updateUi.copy(needsPermission = false)
+            updates.install(file)
+        }
+    }
+
+    private fun refreshWidget() {
+        viewModelScope.launch { runCatching { RateWidget().updateAll(getApplication()) } }
     }
 
     fun refresh() {
@@ -122,6 +244,7 @@ class ConverterViewModel(app: Application) : AndroidViewModel(app) {
             state = try {
                 val r = repo.fetch()
                 lastFetchMillis = System.currentTimeMillis()
+                refreshWidget()
                 state.copy(
                     rates = r.rates, updatedMillis = r.updatedMillis, source = r.source,
                     loading = false, offline = false,
@@ -160,7 +283,12 @@ class ConverterViewModel(app: Application) : AndroidViewModel(app) {
     fun swap() = update(state.copy(from = state.to, to = state.from))
 
     private fun update(s: UiState) {
+        val pairChanged = s.from != state.from || s.to != state.to
         state = s
+        if (pairChanged) {
+            loadHistory()
+            refreshWidget()
+        }
         prefs.edit()
             .putString("from", s.from)
             .putString("to", s.to)

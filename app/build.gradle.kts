@@ -16,8 +16,8 @@ android {
         applicationId = "dev.charly.divisas"
         minSdk = 26
         targetSdk = 37
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
     }
 
     signingConfigs {
@@ -70,5 +70,6 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    implementation(libs.glance.appwidget)
     debugImplementation(libs.compose.ui.tooling)
 }

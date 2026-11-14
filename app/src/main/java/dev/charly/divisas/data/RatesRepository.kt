@@ -5,8 +5,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.LocalDate
 import java.time.ZoneOffset
 
@@ -30,6 +28,9 @@ class RatesRepository(context: Context) {
         }.getOrNull()
     }
 
+    /** Cuándo se bajó por última vez el tipo de cambio (no cuándo lo publicó la fuente). */
+    fun lastFetchMillis(): Long = prefs.getLong(KEY_FETCHED, 0L)
+
     /** Baja el tipo de cambio actual. Intenta ExchangeRate-API y, si falla, Frankfurter (BCE). */
     suspend fun fetch(): Rates = withContext(Dispatchers.IO) {
         val result = runCatching { fetchErApi() }.getOrNull() ?: fetchFrankfurter()
@@ -38,7 +39,7 @@ class RatesRepository(context: Context) {
     }
 
     private fun fetchErApi(): Rates {
-        val j = JSONObject(httpGet("https://open.er-api.com/v6/latest/USD"))
+        val j = JSONObject(Http.get("https://open.er-api.com/v6/latest/USD"))
         if (j.optString("result") != "success") throw IOException("ExchangeRate-API: ${j.optString("error-type")}")
         return Rates(
             rates = j.getJSONObject("rates").toDoubleMap(),
@@ -48,7 +49,7 @@ class RatesRepository(context: Context) {
     }
 
     private fun fetchFrankfurter(): Rates {
-        val j = JSONObject(httpGet("https://api.frankfurter.app/latest?from=USD"))
+        val j = JSONObject(Http.get("https://api.frankfurter.dev/v1/latest?base=USD"))
         val date = LocalDate.parse(j.getString("date"))
         return Rates(
             rates = j.getJSONObject("rates").toDoubleMap() + ("USD" to 1.0),
@@ -57,25 +58,15 @@ class RatesRepository(context: Context) {
         )
     }
 
-    private fun httpGet(url: String): String {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 10_000
-        conn.readTimeout = 10_000
-        conn.setRequestProperty("Accept", "application/json")
-        try {
-            if (conn.responseCode !in 200..299) throw IOException("HTTP ${conn.responseCode}")
-            return conn.inputStream.bufferedReader().use { it.readText() }
-        } finally {
-            conn.disconnect()
-        }
-    }
-
     private fun save(r: Rates) {
         val j = JSONObject()
             .put("rates", JSONObject(r.rates))
             .put("updated", r.updatedMillis)
             .put("source", r.source)
-        prefs.edit().putString(KEY, j.toString()).apply()
+        prefs.edit()
+            .putString(KEY, j.toString())
+            .putLong(KEY_FETCHED, System.currentTimeMillis())
+            .apply()
     }
 
     private fun JSONObject.toDoubleMap(): Map<String, Double> =
@@ -83,5 +74,6 @@ class RatesRepository(context: Context) {
 
     private companion object {
         const val KEY = "rates_json"
+        const val KEY_FETCHED = "fetched_at"
     }
 }

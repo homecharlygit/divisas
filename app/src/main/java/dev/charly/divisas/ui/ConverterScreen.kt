@@ -3,6 +3,9 @@ package dev.charly.divisas.ui
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -98,6 +101,13 @@ fun ConverterScreen(
     val str = LocalStrings.current
     val locale = LocalAppLocale.current
     var picking by rememberSaveable { mutableStateOf<Side?>(null) }
+    var menuOpen by remember { mutableStateOf(false) }
+    // Desenfoca la pantalla mientras el menú o el selector de monedas están abiertos
+    val backdropBlur by animateDpAsState(
+        targetValue = if (menuOpen || picking != null) 20.dp else 0.dp,
+        animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow),
+        label = "backdropBlur",
+    )
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     // La entrada escalonada solo se reproduce al abrir la pantalla
@@ -108,13 +118,20 @@ fun ConverterScreen(
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
+            .appBlur(backdropBlur)
             .nestedScroll(scroll.nestedScrollConnection),
         topBar = {
             LargeTopAppBar(
                 title = { Text(str.appTitle, fontWeight = FontWeight.Bold) },
                 actions = {
                     RefreshAction(loading = s.loading, label = str.refresh, onClick = vm::refresh)
-                    OverflowMenu(str = str, onSettings = onOpenSettings, onAbout = onOpenAbout)
+                    OverflowMenu(
+                        str = str,
+                        open = menuOpen,
+                        onOpenChange = { menuOpen = it },
+                        onSettings = onOpenSettings,
+                        onAbout = onOpenAbout,
+                    )
                 },
                 scrollBehavior = scroll,
             )
@@ -277,11 +294,16 @@ private fun RefreshAction(loading: Boolean, label: String, onClick: () -> Unit) 
 }
 
 @Composable
-private fun OverflowMenu(str: Strings, onSettings: () -> Unit, onAbout: () -> Unit) {
-    var open by remember { mutableStateOf(false) }
+private fun OverflowMenu(
+    str: Strings,
+    open: Boolean,
+    onOpenChange: (Boolean) -> Unit,
+    onSettings: () -> Unit,
+    onAbout: () -> Unit,
+) {
     val turn by animateFloatAsState(if (open) 90f else 0f, Motion.wobbly(), label = "menuIcon")
     Box {
-        IconButton(onClick = { open = true }) {
+        IconButton(onClick = { onOpenChange(true) }) {
             Icon(
                 painterResource(R.drawable.ic_more_vert),
                 contentDescription = str.moreOptions,
@@ -290,18 +312,18 @@ private fun OverflowMenu(str: Strings, onSettings: () -> Unit, onAbout: () -> Un
         }
         DropdownMenu(
             expanded = open,
-            onDismissRequest = { open = false },
+            onDismissRequest = { onOpenChange(false) },
             shape = RoundedCornerShape(20.dp),
         ) {
             DropdownMenuItem(
                 text = { Text(str.settings) },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_settings), contentDescription = null) },
-                onClick = { open = false; onSettings() },
+                onClick = { onOpenChange(false); onSettings() },
             )
             DropdownMenuItem(
                 text = { Text(str.about) },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_info), contentDescription = null) },
-                onClick = { open = false; onAbout() },
+                onClick = { onOpenChange(false); onAbout() },
             )
         }
     }

@@ -44,6 +44,7 @@ data class AppSettings(
     val palette: Int,
     val dark: Boolean,
     val language: AppLanguage,
+    val blur: BlurType,
 )
 
 val FAVORITES = listOf("MXN", "USD", "EUR", "CAD", "GBP", "JPY", "CNY", "BRL", "COP", "ARS")
@@ -68,6 +69,7 @@ class ConverterViewModel(app: Application) : AndroidViewModel(app) {
             palette = prefs.getInt("palette", DEFAULT_PALETTE),
             dark = prefs.getBoolean("dark", true), // oscuro por defecto
             language = AppLanguage.from(prefs.getString("lang", null)),
+            blur = BlurType.from(prefs.getString("blur", null)), // Kawase por defecto
         )
     )
         private set
@@ -85,6 +87,11 @@ class ConverterViewModel(app: Application) : AndroidViewModel(app) {
     fun setLanguage(lang: AppLanguage) {
         settings = settings.copy(language = lang)
         prefs.edit().putString("lang", lang.code).apply()
+    }
+
+    fun setBlur(type: BlurType) {
+        settings = settings.copy(blur = type)
+        prefs.edit().putString("blur", type.code).apply()
     }
 
     init {

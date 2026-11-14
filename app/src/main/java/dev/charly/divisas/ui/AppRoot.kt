@@ -2,6 +2,10 @@ package dev.charly.divisas.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.animateDp
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.unit.dp
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -36,6 +40,7 @@ fun AppRoot(vm: ConverterViewModel) {
     CompositionLocalProvider(
         LocalStrings provides stringsFor(settings.language),
         LocalAppLocale provides settings.language.locale,
+        LocalBlurType provides settings.blur,
     ) {
         DivisasTheme(palette = settings.palette, dark = settings.dark) {
             var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
@@ -59,6 +64,12 @@ fun AppRoot(vm: ConverterViewModel) {
                     },
                     label = "screens",
                 ) { target ->
+                    // La pantalla que entra se enfoca y la que sale se desenfoca
+                    val blur by transition.animateDp(
+                        transitionSpec = { spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow) },
+                        label = "screenBlur",
+                    ) { state -> if (state == EnterExitState.Visible) 0.dp else 24.dp }
+                    Box(Modifier.fillMaxSize().appBlur(blur)) {
                     when (target) {
                         Screen.HOME -> ConverterScreen(
                             vm = vm,
@@ -67,6 +78,7 @@ fun AppRoot(vm: ConverterViewModel) {
                         )
                         Screen.SETTINGS -> SettingsScreen(vm = vm, onBack = { screen = Screen.HOME })
                         Screen.ABOUT -> AboutScreen(onBack = { screen = Screen.HOME })
+                    }
                     }
                 }
             }

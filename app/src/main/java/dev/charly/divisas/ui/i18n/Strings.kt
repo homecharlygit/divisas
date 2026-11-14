@@ -1,0 +1,217 @@
+package dev.charly.divisas.ui.i18n
+
+import androidx.compose.runtime.staticCompositionLocalOf
+import java.util.Locale
+
+enum class AppLanguage(val code: String, val tag: String, val nativeName: String, val flag: String) {
+    ES("es", "es-MX", "Español", "🇲🇽"),
+    EN("en", "en-US", "English", "🇺🇸"),
+    PT("pt", "pt-BR", "Português (Brasil)", "🇧🇷");
+
+    val locale: Locale get() = Locale.forLanguageTag(tag)
+
+    companion object {
+        fun from(code: String?): AppLanguage = entries.firstOrNull { it.code == code } ?: ES
+    }
+}
+
+class Strings(
+    // Inicio
+    val appTitle: String,
+    val refresh: String,
+    val moreOptions: String,
+    val settings: String,
+    val about: String,
+    val back: String,
+    val youHave: String,
+    val youGet: String,
+    val swap: String,
+    val inOtherCurrencies: (amount: String, code: String) -> String,
+    val searchHint: String,
+    val notFound: String,
+    val loading: String,
+    val loadError: String,
+    val offline: (time: String) -> String,
+    val updated: (time: String, source: String) -> String,
+    // Ajustes
+    val themeColor: String,
+    val themeColorDesc: String,
+    val wallpaper: String,
+    val colorNames: List<String>,
+    val appearance: String,
+    val darkMode: String,
+    val on: String,
+    val off: String,
+    val language: String,
+    // Acerca de
+    val tagline: String,
+    val version: (String) -> String,
+    val credits: String,
+    val development: String,
+    val design: String,
+    val designValue: String,
+    val codeAssist: String,
+    val dataSources: String,
+    val erApiDesc: String,
+    val frankfurterDesc: String,
+    val builtWith: String,
+    val license: String,
+    val licenseSummary: String,
+    val viewLicense: String,
+    val sourceCode: String,
+    val notice: String,
+    val disclaimer: String,
+)
+
+val Spanish = Strings(
+    appTitle = "Divisas",
+    refresh = "Actualizar",
+    moreOptions = "Más opciones",
+    settings = "Ajustes",
+    about = "Acerca de",
+    back = "Atrás",
+    youHave = "TIENES",
+    youGet = "RECIBES",
+    swap = "Intercambiar monedas",
+    inOtherCurrencies = { a, c -> "$a $c en otras monedas" },
+    searchHint = "Buscar (dólar, EUR, yen…)",
+    notFound = "No encontré esa moneda",
+    loading = "Cargando tipo de cambio…",
+    loadError = "No se pudo cargar el tipo de cambio. Revisa tu conexión.",
+    offline = { t -> "Sin conexión. Usando datos del $t" },
+    updated = { t, s -> "Actualizado $t · $s" },
+    themeColor = "Color del tema",
+    themeColorDesc = "Elige el color principal de la app",
+    wallpaper = "Wallpaper",
+    colorNames = listOf("Rojo", "Naranja", "Ámbar", "Verde", "Turquesa", "Azul", "Morado", "Rosa"),
+    appearance = "Apariencia",
+    darkMode = "Modo oscuro",
+    on = "Activado",
+    off = "Desactivado",
+    language = "Idioma",
+    tagline = "Conversor de divisas con tipo de cambio actualizado",
+    version = { "Versión $it" },
+    credits = "Créditos",
+    development = "Desarrollo",
+    design = "Diseño",
+    designValue = "Material 3 Expressive de Google",
+    codeAssist = "Asistencia de código",
+    dataSources = "Fuentes de datos",
+    erApiDesc = "Fuente principal · ~160 monedas, se actualiza a diario",
+    frankfurterDesc = "Respaldo · tipos de referencia del Banco Central Europeo",
+    builtWith = "Hecho con",
+    license = "Licencia",
+    licenseSummary = "Divisas es software libre: puedes redistribuirlo y modificarlo bajo los términos de la " +
+        "Licencia Pública General de GNU, versión 3 (GPL-3.0). Se distribuye SIN NINGUNA GARANTÍA. " +
+        "Si compartes una versión modificada, tienes que publicar su código bajo la misma licencia.",
+    viewLicense = "Ver licencia",
+    sourceCode = "Código fuente",
+    notice = "Aviso",
+    disclaimer = "Los tipos de cambio son de referencia y pueden no coincidir con los de bancos o casas de " +
+        "cambio, que suelen incluir comisión o margen.",
+)
+
+val English = Strings(
+    appTitle = "Currencies",
+    refresh = "Refresh",
+    moreOptions = "More options",
+    settings = "Settings",
+    about = "About",
+    back = "Back",
+    youHave = "YOU HAVE",
+    youGet = "YOU GET",
+    swap = "Swap currencies",
+    inOtherCurrencies = { a, c -> "$a $c in other currencies" },
+    searchHint = "Search (dollar, EUR, yen…)",
+    notFound = "Couldn't find that currency",
+    loading = "Loading exchange rates…",
+    loadError = "Couldn't load exchange rates. Check your connection.",
+    offline = { t -> "Offline. Using data from $t" },
+    updated = { t, s -> "Updated $t · $s" },
+    themeColor = "Theme color",
+    themeColorDesc = "Pick the app's main color",
+    wallpaper = "Wallpaper",
+    colorNames = listOf("Red", "Orange", "Amber", "Green", "Teal", "Blue", "Purple", "Pink"),
+    appearance = "Appearance",
+    darkMode = "Dark mode",
+    on = "On",
+    off = "Off",
+    language = "Language",
+    tagline = "Currency converter with up-to-date exchange rates",
+    version = { "Version $it" },
+    credits = "Credits",
+    development = "Development",
+    design = "Design",
+    designValue = "Material 3 Expressive by Google",
+    codeAssist = "Coding assistance",
+    dataSources = "Data sources",
+    erApiDesc = "Main source · ~160 currencies, updated daily",
+    frankfurterDesc = "Backup · European Central Bank reference rates",
+    builtWith = "Built with",
+    license = "License",
+    licenseSummary = "Divisas is free software: you can redistribute it and/or modify it under the terms of the " +
+        "GNU General Public License, version 3 (GPL-3.0). It comes WITHOUT ANY WARRANTY. " +
+        "If you share a modified version, you must publish its source code under the same license.",
+    viewLicense = "View license",
+    sourceCode = "Source code",
+    notice = "Notice",
+    disclaimer = "Exchange rates are for reference only and may differ from those offered by banks or " +
+        "exchange offices, which usually add a fee or margin.",
+)
+
+val Portuguese = Strings(
+    appTitle = "Câmbio",
+    refresh = "Atualizar",
+    moreOptions = "Mais opções",
+    settings = "Configurações",
+    about = "Sobre",
+    back = "Voltar",
+    youHave = "VOCÊ TEM",
+    youGet = "VOCÊ RECEBE",
+    swap = "Inverter moedas",
+    inOtherCurrencies = { a, c -> "$a $c em outras moedas" },
+    searchHint = "Buscar (dólar, EUR, iene…)",
+    notFound = "Não encontrei essa moeda",
+    loading = "Carregando cotações…",
+    loadError = "Não foi possível carregar as cotações. Verifique sua conexão.",
+    offline = { t -> "Sem conexão. Usando dados de $t" },
+    updated = { t, s -> "Atualizado $t · $s" },
+    themeColor = "Cor do tema",
+    themeColorDesc = "Escolha a cor principal do app",
+    wallpaper = "Papel de parede",
+    colorNames = listOf("Vermelho", "Laranja", "Âmbar", "Verde", "Turquesa", "Azul", "Roxo", "Rosa"),
+    appearance = "Aparência",
+    darkMode = "Modo escuro",
+    on = "Ativado",
+    off = "Desativado",
+    language = "Idioma",
+    tagline = "Conversor de moedas com cotação atualizada",
+    version = { "Versão $it" },
+    credits = "Créditos",
+    development = "Desenvolvimento",
+    design = "Design",
+    designValue = "Material 3 Expressive do Google",
+    codeAssist = "Assistência de código",
+    dataSources = "Fontes de dados",
+    erApiDesc = "Fonte principal · ~160 moedas, atualizada diariamente",
+    frankfurterDesc = "Reserva · taxas de referência do Banco Central Europeu",
+    builtWith = "Feito com",
+    license = "Licença",
+    licenseSummary = "Divisas é software livre: você pode redistribuí-lo e modificá-lo sob os termos da " +
+        "Licença Pública Geral GNU, versão 3 (GPL-3.0). É distribuído SEM NENHUMA GARANTIA. " +
+        "Se você compartilhar uma versão modificada, deve publicar o código-fonte sob a mesma licença.",
+    viewLicense = "Ver licença",
+    sourceCode = "Código-fonte",
+    notice = "Aviso",
+    disclaimer = "As cotações são apenas de referência e podem ser diferentes das oferecidas por bancos ou " +
+        "casas de câmbio, que costumam incluir taxa ou margem.",
+)
+
+fun stringsFor(lang: AppLanguage): Strings = when (lang) {
+    AppLanguage.ES -> Spanish
+    AppLanguage.EN -> English
+    AppLanguage.PT -> Portuguese
+}
+
+val LocalStrings = staticCompositionLocalOf { Spanish }
+val LocalAppLocale = staticCompositionLocalOf { AppLanguage.ES.locale }

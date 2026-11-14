@@ -8,6 +8,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.charly.divisas.data.RatesRepository
+import dev.charly.divisas.ui.i18n.AppLanguage
+import dev.charly.divisas.ui.theme.DEFAULT_PALETTE
 import kotlinx.coroutines.launch
 
 data class UiState(
@@ -38,6 +40,12 @@ data class UiState(
         }
 }
 
+data class AppSettings(
+    val palette: Int,
+    val dark: Boolean,
+    val language: AppLanguage,
+)
+
 val FAVORITES = listOf("MXN", "USD", "EUR", "CAD", "GBP", "JPY", "CNY", "BRL", "COP", "ARS")
 
 class ConverterViewModel(app: Application) : AndroidViewModel(app) {
@@ -54,6 +62,30 @@ class ConverterViewModel(app: Application) : AndroidViewModel(app) {
         )
     )
         private set
+
+    var settings by mutableStateOf(
+        AppSettings(
+            palette = prefs.getInt("palette", DEFAULT_PALETTE),
+            dark = prefs.getBoolean("dark", true), // oscuro por defecto
+            language = AppLanguage.from(prefs.getString("lang", null)),
+        )
+    )
+        private set
+
+    fun setPalette(index: Int) {
+        settings = settings.copy(palette = index)
+        prefs.edit().putInt("palette", index).apply()
+    }
+
+    fun setDark(dark: Boolean) {
+        settings = settings.copy(dark = dark)
+        prefs.edit().putBoolean("dark", dark).apply()
+    }
+
+    fun setLanguage(lang: AppLanguage) {
+        settings = settings.copy(language = lang)
+        prefs.edit().putString("lang", lang.code).apply()
+    }
 
     init {
         repo.cached()?.let {

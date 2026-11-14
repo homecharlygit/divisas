@@ -1,56 +1,85 @@
 package dev.charly.divisas.ui.theme
 
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val LightColors = lightColorScheme(
-    primary = Color(0xFF5B4FC4),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFE4DFFF),
-    onPrimaryContainer = Color(0xFF170065),
-    tertiary = Color(0xFF7D4E68),
-    tertiaryContainer = Color(0xFFFFD8EC),
-    onTertiaryContainer = Color(0xFF3A0727),
-)
-
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFFC7BFFF),
-    onPrimary = Color(0xFF2C1A93),
-    primaryContainer = Color(0xFF4334AB),
-    onPrimaryContainer = Color(0xFFE4DFFF),
-    tertiary = Color(0xFFEFB5D2),
-    tertiaryContainer = Color(0xFF5D2A48),
-    onTertiaryContainer = Color(0xFFFFD8EC),
-)
+val supportsDynamicColor: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun DivisasTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    palette: Int,
+    dark: Boolean,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    // Material You (colores del wallpaper) en Android 12+
-    val colors = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        darkTheme -> DarkColors
-        else -> LightColors
+    val target = remember(palette, dark) {
+        if (palette == PALETTE_DYNAMIC && supportsDynamicColor) {
+            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        } else {
+            schemeFor(PALETTE_HUES[palette.coerceIn(PALETTE_HUES.indices)], dark)
+        }
     }
 
     MaterialExpressiveTheme(
-        colorScheme = colors,
+        colorScheme = animateColorScheme(target),
         motionScheme = MotionScheme.expressive(),
         content = content,
     )
 }
+
+/** Transición suave de todos los colores al cambiar de paleta o de modo claro/oscuro. */
+@Composable
+private fun animateColorScheme(t: ColorScheme): ColorScheme = t.copy(
+    primary = t.primary.anim(),
+    onPrimary = t.onPrimary.anim(),
+    primaryContainer = t.primaryContainer.anim(),
+    onPrimaryContainer = t.onPrimaryContainer.anim(),
+    inversePrimary = t.inversePrimary.anim(),
+    secondary = t.secondary.anim(),
+    onSecondary = t.onSecondary.anim(),
+    secondaryContainer = t.secondaryContainer.anim(),
+    onSecondaryContainer = t.onSecondaryContainer.anim(),
+    tertiary = t.tertiary.anim(),
+    onTertiary = t.onTertiary.anim(),
+    tertiaryContainer = t.tertiaryContainer.anim(),
+    onTertiaryContainer = t.onTertiaryContainer.anim(),
+    background = t.background.anim(),
+    onBackground = t.onBackground.anim(),
+    surface = t.surface.anim(),
+    onSurface = t.onSurface.anim(),
+    surfaceVariant = t.surfaceVariant.anim(),
+    onSurfaceVariant = t.onSurfaceVariant.anim(),
+    surfaceTint = t.surfaceTint.anim(),
+    inverseSurface = t.inverseSurface.anim(),
+    inverseOnSurface = t.inverseOnSurface.anim(),
+    error = t.error.anim(),
+    onError = t.onError.anim(),
+    errorContainer = t.errorContainer.anim(),
+    onErrorContainer = t.onErrorContainer.anim(),
+    outline = t.outline.anim(),
+    outlineVariant = t.outlineVariant.anim(),
+    surfaceBright = t.surfaceBright.anim(),
+    surfaceDim = t.surfaceDim.anim(),
+    surfaceContainerLowest = t.surfaceContainerLowest.anim(),
+    surfaceContainerLow = t.surfaceContainerLow.anim(),
+    surfaceContainer = t.surfaceContainer.anim(),
+    surfaceContainerHigh = t.surfaceContainerHigh.anim(),
+    surfaceContainerHighest = t.surfaceContainerHighest.anim(),
+)
+
+@Composable
+private fun Color.anim(): Color =
+    animateColorAsState(this, spring(stiffness = Spring.StiffnessLow), label = "color").value

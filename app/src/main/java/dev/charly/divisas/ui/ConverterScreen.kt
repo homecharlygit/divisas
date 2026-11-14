@@ -1,7 +1,18 @@
 package dev.charly.divisas.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,12 +27,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
@@ -40,8 +52,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,11 +67,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.charly.divisas.R
+import dev.charly.divisas.ui.i18n.LocalAppLocale
+import dev.charly.divisas.ui.i18n.LocalStrings
+import dev.charly.divisas.ui.i18n.Strings
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.Normalizer
 import java.text.NumberFormat
@@ -69,16 +85,25 @@ import java.time.format.DateTimeFormatter
 import java.util.Currency
 import java.util.Locale
 
-private val MX = Locale.forLanguageTag("es-MX")
-
 private enum class Side { FROM, TO }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ConverterScreen(vm: ConverterViewModel) {
+fun ConverterScreen(
+    vm: ConverterViewModel,
+    onOpenSettings: () -> Unit,
+    onOpenAbout: () -> Unit,
+) {
     val s = vm.state
+    val str = LocalStrings.current
+    val locale = LocalAppLocale.current
     var picking by rememberSaveable { mutableStateOf<Side?>(null) }
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    // La entrada escalonada solo se reproduce al abrir la pantalla
+    var introDone by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(1500); introDone = true }
+    val intro = !introDone
 
     Scaffold(
         modifier = Modifier
@@ -86,15 +111,10 @@ fun ConverterScreen(vm: ConverterViewModel) {
             .nestedScroll(scroll.nestedScrollConnection),
         topBar = {
             LargeTopAppBar(
-                title = { Text("Divisas", fontWeight = FontWeight.Bold) },
+                title = { Text(str.appTitle, fontWeight = FontWeight.Bold) },
                 actions = {
-                    if (s.loading) {
-                        LoadingIndicator(modifier = Modifier.padding(end = 8.dp).size(40.dp))
-                    } else {
-                        IconButton(onClick = vm::refresh) {
-                            Icon(painterResource(R.drawable.ic_refresh), contentDescription = "Actualizar")
-                        }
-                    }
+                    RefreshAction(loading = s.loading, label = str.refresh, onClick = vm::refresh)
+                    OverflowMenu(str = str, onSettings = onOpenSettings, onAbout = onOpenAbout)
                 },
                 scrollBehavior = scroll,
             )
@@ -113,63 +133,102 @@ fun ConverterScreen(vm: ConverterViewModel) {
             item {
                 ConverterCards(
                     s = s,
+                    str = str,
+                    locale = locale,
                     onAmount = vm::setAmount,
                     onPickFrom = { picking = Side.FROM },
                     onPickTo = { picking = Side.TO },
                     onSwap = vm::swap,
+                    modifier = Modifier.staggeredEnter(0, intro),
                 )
             }
 
             item {
-                val one = s.convert(1.0, s.from, s.to)
-                Text(
-                    text = if (one != null) "1 ${s.from} = ${fmt(one)} ${s.to}" else "",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 4.dp),
-                )
-                Text(
-                    text = statusText(s),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (s.offline) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column(Modifier.staggeredEnter(1, intro)) {
+                    val one = s.convert(1.0, s.from, s.to)
+                    AnimatedContent(
+                        targetState = if (one != null) "1 ${s.from} = ${fmt(one, locale)} ${s.to}" else "",
+                        transitionSpec = {
+                            (fadeIn() + scaleIn(Motion.bouncy(), initialScale = 0.8f)) togetherWith
+                                (fadeOut() + scaleOut(targetScale = 1.1f))
+                        },
+                        label = "rate",
+                        modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 4.dp),
+                    ) { text ->
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Text(
+                        text = statusText(s, str, locale),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (s.offline) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
 
             item {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                    contentPadding = PaddingValues(vertical = 6.dp, horizontal = 2.dp),
+                    modifier = Modifier.padding(top = 14.dp, bottom = 4.dp).staggeredEnter(2, intro),
                 ) {
-                    items(FAVORITES.filter { it != s.from }) { code ->
+                    itemsIndexed(FAVORITES.filter { it != s.from }, key = { _, c -> c }) { _, code ->
+                        val selected = code == s.to
+                        val scale by animateFloatAsState(if (selected) 1.1f else 1f, Motion.wobbly(), label = "chip")
                         FilterChip(
-                            selected = code == s.to,
+                            selected = selected,
                             onClick = { vm.setTo(code) },
                             label = { Text("${flag(code)}  $code", fontWeight = FontWeight.SemiBold) },
+                            modifier = Modifier
+                                .animateItem(placementSpec = Motion.bouncy())
+                                .graphicsLayer { scaleX = scale; scaleY = scale },
                         )
                     }
                 }
             }
 
             item {
-                Text(
-                    text = "${fmt(n)} ${s.from} en otras monedas",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 10.dp),
-                )
+                AnimatedContent(
+                    targetState = str.inOtherCurrencies(fmt(n, locale), s.from),
+                    transitionSpec = {
+                        (slideInVertically(Motion.bouncy()) { it } + fadeIn()) togetherWith
+                            (slideOutVertically { -it } + fadeOut())
+                    },
+                    label = "otherTitle",
+                    modifier = Modifier.staggeredEnter(3, intro),
+                ) { title ->
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 10.dp),
+                    )
+                }
             }
 
             itemsIndexed(others, key = { _, c -> c }) { i, code ->
                 CurrencyRow(
                     code = code,
-                    value = fmt(s.convert(n, s.from, code)),
+                    name = currencyName(code, locale),
+                    value = fmt(s.convert(n, s.from, code), locale),
                     shape = segmentShape(i, others.size),
                     onClick = { vm.setTo(code) },
-                    modifier = Modifier.animateItem().padding(bottom = 3.dp),
+                    modifier = Modifier
+                        .animateItem(
+                            fadeInSpec = Motion.snappy(),
+                            placementSpec = Motion.bouncy(),
+                            fadeOutSpec = Motion.snappy(),
+                        )
+                        .staggeredEnter(4 + i, intro)
+                        .padding(bottom = 3.dp),
                 )
             }
         }
@@ -179,6 +238,8 @@ fun ConverterScreen(vm: ConverterViewModel) {
         CurrencyPicker(
             currencies = s.currencies,
             selected = if (side == Side.FROM) s.from else s.to,
+            str = str,
+            locale = locale,
             onPick = { if (side == Side.FROM) vm.setFrom(it) else vm.setTo(it) },
             onDismiss = { picking = null },
         )
@@ -187,33 +248,97 @@ fun ConverterScreen(vm: ConverterViewModel) {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
+private fun RefreshAction(loading: Boolean, label: String, onClick: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val spin = remember { Animatable(0f) }
+    AnimatedContent(
+        targetState = loading,
+        transitionSpec = {
+            (scaleIn(Motion.wobbly(), initialScale = 0.3f) + fadeIn()) togetherWith
+                (scaleOut(targetScale = 0.3f) + fadeOut())
+        },
+        label = "refresh",
+    ) { isLoading ->
+        if (isLoading) {
+            LoadingIndicator(modifier = Modifier.padding(horizontal = 4.dp).size(40.dp))
+        } else {
+            IconButton(onClick = {
+                scope.launch { spin.animateTo(spin.targetValue + 360f, Motion.bouncy()) }
+                onClick()
+            }) {
+                Icon(
+                    painterResource(R.drawable.ic_refresh),
+                    contentDescription = label,
+                    modifier = Modifier.graphicsLayer { rotationZ = spin.value },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverflowMenu(str: Strings, onSettings: () -> Unit, onAbout: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val turn by animateFloatAsState(if (open) 90f else 0f, Motion.wobbly(), label = "menuIcon")
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(
+                painterResource(R.drawable.ic_more_vert),
+                contentDescription = str.moreOptions,
+                modifier = Modifier.graphicsLayer { rotationZ = turn },
+            )
+        }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(20.dp),
+        ) {
+            DropdownMenuItem(
+                text = { Text(str.settings) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_settings), contentDescription = null) },
+                onClick = { open = false; onSettings() },
+            )
+            DropdownMenuItem(
+                text = { Text(str.about) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_info), contentDescription = null) },
+                onClick = { open = false; onAbout() },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
 private fun ConverterCards(
     s: UiState,
+    str: Strings,
+    locale: Locale,
     onAmount: (String) -> Unit,
     onPickFrom: () -> Unit,
     onPickTo: () -> Unit,
     onSwap: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    var turns by remember { mutableIntStateOf(0) }
-    // Giro con el resorte "expressive" del MotionScheme del tema
-    val rotation by animateFloatAsState(
-        targetValue = turns * 180f,
-        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        label = "swap",
-    )
+    val scope = rememberCoroutineScope()
+    val rotation = remember { Animatable(0f) }
+    val pop = remember { Animatable(1f) }
+    val nudge = remember { Animatable(0f) }
+    val swapSource = remember { MutableInteractionSource() }
+    val pressScale = rememberPressScale(swapSource, 0.8f)
 
-    Box(contentAlignment = Alignment.Center) {
+    Box(contentAlignment = Alignment.Center, modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             // TIENES
             Surface(
                 shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 12.dp, bottomEnd = 12.dp),
                 color = colors.surfaceContainerHigh,
+                modifier = Modifier.graphicsLayer { translationY = nudge.value * 18.dp.toPx() },
             ) {
                 Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                    Label("TIENES")
+                    Label(str.youHave)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CurrencyButton(s.from, onPickFrom)
+                        CurrencyButton(s.from, upward = false, onClick = onPickFrom)
                         Spacer(Modifier.width(12.dp))
                         BasicTextField(
                             value = s.amount,
@@ -229,7 +354,7 @@ private fun ConverterCards(
                             modifier = Modifier.weight(1f),
                         )
                     }
-                    CurrencyName(s.from)
+                    CurrencyName(currencyName(s.from, locale))
                 }
             }
             // RECIBES
@@ -237,14 +362,17 @@ private fun ConverterCards(
                 shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 32.dp, bottomEnd = 32.dp),
                 color = colors.primaryContainer,
                 contentColor = colors.onPrimaryContainer,
+                modifier = Modifier.graphicsLayer { translationY = -nudge.value * 18.dp.toPx() },
             ) {
                 Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                    Label("RECIBES")
+                    Label(str.youGet)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CurrencyButton(s.to, onPickTo)
+                        CurrencyButton(s.to, upward = true, onClick = onPickTo)
                         Spacer(Modifier.width(12.dp))
+                        val result = s.convert(s.amountValue, s.from, s.to)
+                        val shown = animatedNumber(result ?: 0.0)
                         Text(
-                            text = fmt(s.convert(s.amountValue, s.from, s.to)),
+                            text = if (result == null) "—" else fmt(shown, locale),
                             style = MaterialTheme.typography.displaySmall,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.End,
@@ -253,25 +381,38 @@ private fun ConverterCards(
                             modifier = Modifier.weight(1f),
                         )
                     }
-                    CurrencyName(s.to)
+                    CurrencyName(currencyName(s.to, locale))
                 }
             }
         }
 
-        // Botón de intercambio con forma de galleta (MaterialShapes) que gira con resorte
+        // Botón de intercambio: galleta de MaterialShapes que gira, "explota" y empuja las tarjetas
         Surface(
-            onClick = { turns++; onSwap() },
+            onClick = {
+                onSwap()
+                scope.launch { rotation.animateTo(rotation.targetValue + 180f, Motion.wobbly()) }
+                scope.launch { pop.snapTo(1.35f); pop.animateTo(1f, Motion.wobbly()) }
+                scope.launch { nudge.snapTo(1f); nudge.animateTo(0f, Motion.wobbly()) }
+            },
             shape = MaterialShapes.Cookie9Sided.toShape(),
             color = colors.tertiaryContainer,
             contentColor = colors.onTertiaryContainer,
             border = BorderStroke(5.dp, colors.surface),
-            modifier = Modifier.size(68.dp).graphicsLayer { rotationZ = rotation },
+            interactionSource = swapSource,
+            modifier = Modifier
+                .size(72.dp)
+                .graphicsLayer {
+                    rotationZ = rotation.value
+                    val sc = pop.value * pressScale
+                    scaleX = sc
+                    scaleY = sc
+                },
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     painterResource(R.drawable.ic_swap),
-                    contentDescription = "Intercambiar monedas",
-                    modifier = Modifier.size(28.dp),
+                    contentDescription = str.swap,
+                    modifier = Modifier.size(30.dp),
                 )
             }
         }
@@ -289,29 +430,54 @@ private fun Label(text: String) {
 }
 
 @Composable
-private fun CurrencyName(code: String) {
-    Text(
-        text = currencyName(code),
-        style = MaterialTheme.typography.bodySmall,
-        textAlign = TextAlign.End,
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).graphicsLayer { alpha = 0.75f },
-    )
+private fun CurrencyName(name: String) {
+    AnimatedContent(
+        targetState = name,
+        transitionSpec = { fadeIn() togetherWith fadeOut() },
+        label = "name",
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    ) { text ->
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.End,
+            modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = 0.75f },
+        )
+    }
 }
 
 @Composable
-private fun CurrencyButton(code: String, onClick: () -> Unit) {
+private fun CurrencyButton(code: String, upward: Boolean, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    val press = rememberPressScale(source, 0.88f)
     Surface(
         onClick = onClick,
         shape = CircleShape,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+        interactionSource = source,
+        modifier = Modifier.graphicsLayer { scaleX = press; scaleY = press },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         ) {
-            Text(flag(code), style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.width(8.dp))
-            Text(code, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            // Al cambiar de moneda, la nueva entra deslizándose con rebote
+            AnimatedContent(
+                targetState = code,
+                transitionSpec = {
+                    val dir = if (upward) -1 else 1
+                    (slideInVertically(Motion.bouncy()) { h -> dir * h } + fadeIn()) togetherWith
+                        (slideOutVertically(Motion.snappy()) { h -> -dir * h } + fadeOut()) using
+                        SizeTransform(clip = false)
+                },
+                label = "currency",
+            ) { c ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(flag(c), style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.width(8.dp))
+                    Text(c, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            }
             Icon(painterResource(R.drawable.ic_arrow_drop_down), contentDescription = null)
         }
     }
@@ -320,6 +486,7 @@ private fun CurrencyButton(code: String, onClick: () -> Unit) {
 @Composable
 private fun CurrencyRow(
     code: String,
+    name: String,
     value: String?,
     shape: RoundedCornerShape,
     onClick: () -> Unit,
@@ -327,12 +494,15 @@ private fun CurrencyRow(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
+    val source = remember { MutableInteractionSource() }
+    val press = rememberPressScale(source, 0.95f)
     Surface(
         onClick = onClick,
         shape = shape,
         color = if (selected) colors.primaryContainer else colors.surfaceContainer,
         contentColor = if (selected) colors.onPrimaryContainer else colors.onSurface,
-        modifier = modifier.fillMaxWidth(),
+        interactionSource = source,
+        modifier = modifier.fillMaxWidth().graphicsLayer { scaleX = press; scaleY = press },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -342,7 +512,7 @@ private fun CurrencyRow(
             Spacer(Modifier.width(12.dp))
             Text(code, fontWeight = FontWeight.Bold, modifier = Modifier.width(48.dp))
             Text(
-                currencyName(code),
+                name,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (selected) Color.Unspecified else colors.onSurfaceVariant,
                 maxLines = 1,
@@ -361,20 +531,24 @@ private fun CurrencyRow(
 private fun CurrencyPicker(
     currencies: List<String>,
     selected: String,
+    str: Strings,
+    locale: Locale,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
-    val q = normalize(query)
-    val filtered = currencies.filter { q.isEmpty() || it.lowercase().contains(q) || normalize(currencyName(it)).contains(q) }
+    val q = normalize(query, locale)
+    val filtered = currencies.filter {
+        q.isEmpty() || it.lowercase().contains(q) || normalize(currencyName(it, locale), locale).contains(q)
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = { Text("Buscar (dólar, EUR, yen…)") },
+            placeholder = { Text(str.searchHint) },
             leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
             singleLine = true,
             shape = CircleShape,
@@ -385,7 +559,7 @@ private fun CurrencyPicker(
             if (filtered.isEmpty()) {
                 item {
                     Text(
-                        "No encontré esa moneda",
+                        str.notFound,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -395,6 +569,7 @@ private fun CurrencyPicker(
             itemsIndexed(filtered, key = { _, c -> c }) { i, code ->
                 CurrencyRow(
                     code = code,
+                    name = currencyName(code, locale),
                     value = null,
                     shape = segmentShape(i, filtered.size),
                     selected = code == selected,
@@ -402,41 +577,32 @@ private fun CurrencyPicker(
                         onPick(code)
                         scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() }
                     },
-                    modifier = Modifier.padding(bottom = 3.dp),
+                    modifier = Modifier
+                        .animateItem(placementSpec = Motion.bouncy())
+                        .staggeredEnter(minOf(i, 10))
+                        .padding(bottom = 3.dp),
                 )
             }
         }
     }
 }
 
-/** Esquinas tipo "lista segmentada" de M3 Expressive: grandes en los extremos, chicas en medio. */
-private fun segmentShape(index: Int, count: Int): RoundedCornerShape {
-    val big = 24.dp
-    val small = 6.dp
-    return when {
-        count == 1 -> RoundedCornerShape(big)
-        index == 0 -> RoundedCornerShape(big, big, small, small)
-        index == count - 1 -> RoundedCornerShape(small, small, big, big)
-        else -> RoundedCornerShape(small)
-    }
-}
-
-private fun statusText(s: UiState): String {
+private fun statusText(s: UiState, str: Strings, locale: Locale): String {
     val time = s.updatedMillis?.let {
-        DateTimeFormatter.ofPattern("d MMM, HH:mm", MX).format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))
-    }
+        DateTimeFormatter.ofPattern("d MMM, HH:mm", locale).format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))
+    } ?: ""
     return when {
-        s.rates == null && s.loading -> "Cargando tipo de cambio…"
-        s.rates == null -> "No se pudo cargar el tipo de cambio. Revisa tu conexión."
-        s.offline -> "Sin conexión. Usando datos del $time"
-        else -> "Actualizado $time · ${s.source}"
+        s.rates == null && s.loading -> str.loading
+        s.rates == null -> str.loadError
+        s.offline -> str.offline(time)
+        else -> str.updated(time, s.source ?: "")
     }
 }
 
-private fun fmt(v: Double?): String {
+private fun fmt(v: Double?, locale: Locale): String {
     if (v == null) return "—"
     val abs = kotlin.math.abs(v)
-    val nf = NumberFormat.getNumberInstance(MX)
+    val nf = NumberFormat.getNumberInstance(locale)
     nf.minimumFractionDigits = 2
     nf.maximumFractionDigits = when {
         abs >= 1 || abs == 0.0 -> 2
@@ -446,12 +612,12 @@ private fun fmt(v: Double?): String {
     return nf.format(v)
 }
 
-private fun currencyName(code: String): String =
-    runCatching { Currency.getInstance(code).getDisplayName(MX) }.getOrDefault(code)
-        .replaceFirstChar { it.titlecase(MX) }
+private fun currencyName(code: String, locale: Locale): String =
+    runCatching { Currency.getInstance(code).getDisplayName(locale) }.getOrDefault(code)
+        .replaceFirstChar { it.titlecase(locale) }
 
-private fun normalize(s: String): String =
-    Normalizer.normalize(s.trim().lowercase(MX), Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+private fun normalize(s: String, locale: Locale): String =
+    Normalizer.normalize(s.trim().lowercase(locale), Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
 private fun flag(code: String): String {
     val special = mapOf("EUR" to "🇪🇺", "XAF" to "🌍", "XOF" to "🌍", "XCD" to "🌎", "XPF" to "🌏", "ANG" to "🇨🇼", "XDR" to "🌐")

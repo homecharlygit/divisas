@@ -1,0 +1,463 @@
+package dev.charly.divisas.ui
+
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.MaterialShapes
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.toShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import dev.charly.divisas.R
+import kotlinx.coroutines.launch
+import java.text.Normalizer
+import java.text.NumberFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Currency
+import java.util.Locale
+
+private val MX = Locale.forLanguageTag("es-MX")
+
+private enum class Side { FROM, TO }
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun ConverterScreen(vm: ConverterViewModel) {
+    val s = vm.state
+    var picking by rememberSaveable { mutableStateOf<Side?>(null) }
+    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(scroll.nestedScrollConnection),
+        topBar = {
+            LargeTopAppBar(
+                title = { Text("Divisas", fontWeight = FontWeight.Bold) },
+                actions = {
+                    if (s.loading) {
+                        LoadingIndicator(modifier = Modifier.padding(end = 8.dp).size(40.dp))
+                    } else {
+                        IconButton(onClick = vm::refresh) {
+                            Icon(painterResource(R.drawable.ic_refresh), contentDescription = "Actualizar")
+                        }
+                    }
+                },
+                scrollBehavior = scroll,
+            )
+        },
+    ) { pad ->
+        val n = s.amountValue
+        val others = FAVORITES.filter { it != s.from && it != s.to }
+
+        LazyColumn(
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp,
+                top = pad.calculateTopPadding() + 4.dp,
+                bottom = pad.calculateBottomPadding() + 24.dp,
+            ),
+        ) {
+            item {
+                ConverterCards(
+                    s = s,
+                    onAmount = vm::setAmount,
+                    onPickFrom = { picking = Side.FROM },
+                    onPickTo = { picking = Side.TO },
+                    onSwap = vm::swap,
+                )
+            }
+
+            item {
+                val one = s.convert(1.0, s.from, s.to)
+                Text(
+                    text = if (one != null) "1 ${s.from} = ${fmt(one)} ${s.to}" else "",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 4.dp),
+                )
+                Text(
+                    text = statusText(s),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (s.offline) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            item {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                ) {
+                    items(FAVORITES.filter { it != s.from }) { code ->
+                        FilterChip(
+                            selected = code == s.to,
+                            onClick = { vm.setTo(code) },
+                            label = { Text("${flag(code)}  $code", fontWeight = FontWeight.SemiBold) },
+                        )
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = "${fmt(n)} ${s.from} en otras monedas",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 10.dp),
+                )
+            }
+
+            itemsIndexed(others, key = { _, c -> c }) { i, code ->
+                CurrencyRow(
+                    code = code,
+                    value = fmt(s.convert(n, s.from, code)),
+                    shape = segmentShape(i, others.size),
+                    onClick = { vm.setTo(code) },
+                    modifier = Modifier.animateItem().padding(bottom = 3.dp),
+                )
+            }
+        }
+    }
+
+    picking?.let { side ->
+        CurrencyPicker(
+            currencies = s.currencies,
+            selected = if (side == Side.FROM) s.from else s.to,
+            onPick = { if (side == Side.FROM) vm.setFrom(it) else vm.setTo(it) },
+            onDismiss = { picking = null },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun ConverterCards(
+    s: UiState,
+    onAmount: (String) -> Unit,
+    onPickFrom: () -> Unit,
+    onPickTo: () -> Unit,
+    onSwap: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    var turns by remember { mutableIntStateOf(0) }
+    // Giro con el resorte "expressive" del MotionScheme del tema
+    val rotation by animateFloatAsState(
+        targetValue = turns * 180f,
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+        label = "swap",
+    )
+
+    Box(contentAlignment = Alignment.Center) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // TIENES
+            Surface(
+                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 12.dp, bottomEnd = 12.dp),
+                color = colors.surfaceContainerHigh,
+            ) {
+                Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                    Label("TIENES")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CurrencyButton(s.from, onPickFrom)
+                        Spacer(Modifier.width(12.dp))
+                        BasicTextField(
+                            value = s.amount,
+                            onValueChange = onAmount,
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            textStyle = MaterialTheme.typography.displaySmall.copy(
+                                color = colors.onSurface,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.End,
+                            ),
+                            cursorBrush = SolidColor(colors.primary),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    CurrencyName(s.from)
+                }
+            }
+            // RECIBES
+            Surface(
+                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 32.dp, bottomEnd = 32.dp),
+                color = colors.primaryContainer,
+                contentColor = colors.onPrimaryContainer,
+            ) {
+                Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                    Label("RECIBES")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CurrencyButton(s.to, onPickTo)
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = fmt(s.convert(s.amountValue, s.from, s.to)),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.End,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    CurrencyName(s.to)
+                }
+            }
+        }
+
+        // Botón de intercambio con forma de galleta (MaterialShapes) que gira con resorte
+        Surface(
+            onClick = { turns++; onSwap() },
+            shape = MaterialShapes.Cookie9Sided.toShape(),
+            color = colors.tertiaryContainer,
+            contentColor = colors.onTertiaryContainer,
+            border = BorderStroke(5.dp, colors.surface),
+            modifier = Modifier.size(68.dp).graphicsLayer { rotationZ = rotation },
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    painterResource(R.drawable.ic_swap),
+                    contentDescription = "Intercambiar monedas",
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Label(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(bottom = 10.dp).graphicsLayer { alpha = 0.75f },
+    )
+}
+
+@Composable
+private fun CurrencyName(code: String) {
+    Text(
+        text = currencyName(code),
+        style = MaterialTheme.typography.bodySmall,
+        textAlign = TextAlign.End,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).graphicsLayer { alpha = 0.75f },
+    )
+}
+
+@Composable
+private fun CurrencyButton(code: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+        ) {
+            Text(flag(code), style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.width(8.dp))
+            Text(code, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Icon(painterResource(R.drawable.ic_arrow_drop_down), contentDescription = null)
+        }
+    }
+}
+
+@Composable
+private fun CurrencyRow(
+    code: String,
+    value: String?,
+    shape: RoundedCornerShape,
+    onClick: () -> Unit,
+    selected: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = shape,
+        color = if (selected) colors.primaryContainer else colors.surfaceContainer,
+        contentColor = if (selected) colors.onPrimaryContainer else colors.onSurface,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Text(flag(code), style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.width(12.dp))
+            Text(code, fontWeight = FontWeight.Bold, modifier = Modifier.width(48.dp))
+            Text(
+                currencyName(code),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (selected) Color.Unspecified else colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (value != null) {
+                Text(value, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CurrencyPicker(
+    currencies: List<String>,
+    selected: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    val q = normalize(query)
+    val filtered = currencies.filter { q.isEmpty() || it.lowercase().contains(q) || normalize(currencyName(it)).contains(q) }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = { Text("Buscar (dólar, EUR, yen…)") },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
+            singleLine = true,
+            shape = CircleShape,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
+            if (filtered.isEmpty()) {
+                item {
+                    Text(
+                        "No encontré esa moneda",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    )
+                }
+            }
+            itemsIndexed(filtered, key = { _, c -> c }) { i, code ->
+                CurrencyRow(
+                    code = code,
+                    value = null,
+                    shape = segmentShape(i, filtered.size),
+                    selected = code == selected,
+                    onClick = {
+                        onPick(code)
+                        scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() }
+                    },
+                    modifier = Modifier.padding(bottom = 3.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Esquinas tipo "lista segmentada" de M3 Expressive: grandes en los extremos, chicas en medio. */
+private fun segmentShape(index: Int, count: Int): RoundedCornerShape {
+    val big = 24.dp
+    val small = 6.dp
+    return when {
+        count == 1 -> RoundedCornerShape(big)
+        index == 0 -> RoundedCornerShape(big, big, small, small)
+        index == count - 1 -> RoundedCornerShape(small, small, big, big)
+        else -> RoundedCornerShape(small)
+    }
+}
+
+private fun statusText(s: UiState): String {
+    val time = s.updatedMillis?.let {
+        DateTimeFormatter.ofPattern("d MMM, HH:mm", MX).format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))
+    }
+    return when {
+        s.rates == null && s.loading -> "Cargando tipo de cambio…"
+        s.rates == null -> "No se pudo cargar el tipo de cambio. Revisa tu conexión."
+        s.offline -> "Sin conexión. Usando datos del $time"
+        else -> "Actualizado $time · ${s.source}"
+    }
+}
+
+private fun fmt(v: Double?): String {
+    if (v == null) return "—"
+    val abs = kotlin.math.abs(v)
+    val nf = NumberFormat.getNumberInstance(MX)
+    nf.minimumFractionDigits = 2
+    nf.maximumFractionDigits = when {
+        abs >= 1 || abs == 0.0 -> 2
+        abs >= 0.01 -> 4
+        else -> 6
+    }
+    return nf.format(v)
+}
+
+private fun currencyName(code: String): String =
+    runCatching { Currency.getInstance(code).getDisplayName(MX) }.getOrDefault(code)
+        .replaceFirstChar { it.titlecase(MX) }
+
+private fun normalize(s: String): String =
+    Normalizer.normalize(s.trim().lowercase(MX), Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+
+private fun flag(code: String): String {
+    val special = mapOf("EUR" to "🇪🇺", "XAF" to "🌍", "XOF" to "🌍", "XCD" to "🌎", "XPF" to "🌏", "ANG" to "🇨🇼", "XDR" to "🌐")
+    special[code]?.let { return it }
+    if (code.length < 2) return "🏳️"
+    return code.take(2).uppercase().map { ch ->
+        String(Character.toChars(0x1F1E6 + (ch - 'A')))
+    }.joinToString("")
+}

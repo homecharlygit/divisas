@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema base solo para la ventana; todo lo visual lo pinta Compose con MaterialExpressiveTheme -->
+    <style name="Theme.Divisas" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+    <color name="ic_launcher_background">#5B4FC4</color>
+</resources>

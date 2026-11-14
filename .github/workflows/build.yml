@@ -38,8 +38,8 @@ jobs:
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
 
-      # Al subir un tag v* (ej. v1.1) se publica un release con los APKs
-      - name: Publicar release
+      # Al crear un release (o subir un tag v*), se le adjuntan los APKs y las notas
+      - name: Publicar APKs en el release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
@@ -49,5 +49,10 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "dist/divisas-$TAG.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "dist/divisas-$TAG-debug.apk"
           NOTES=".github/release-notes/$TAG.md"
-          if [ -f "$NOTES" ]; then ARGS=(--notes-file "$NOTES"); else ARGS=(--generate-notes); fi
-          gh release create "$TAG" dist/*.apk --title "Divisas $TAG" "${ARGS[@]}"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.apk --clobber
+            if [ -f "$NOTES" ]; then gh release edit "$TAG" --title "Divisas $TAG" --notes-file "$NOTES"; fi
+          else
+            if [ -f "$NOTES" ]; then ARGS=(--notes-file "$NOTES"); else ARGS=(--generate-notes); fi
+            gh release create "$TAG" dist/*.apk --title "Divisas $TAG" "${ARGS[@]}"
+          fi

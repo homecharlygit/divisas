@@ -26,7 +26,23 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Preparar llave de firma
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Firmando con la llave del repo"
+          else
+            echo "::warning::Sin secret SIGNING_KEYSTORE_BASE64: se firma con una llave debug temporal y no se podrá actualizar encima de versiones anteriores"
+          fi
+
       - name: Compilar debug y release
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug assembleRelease --stacktrace

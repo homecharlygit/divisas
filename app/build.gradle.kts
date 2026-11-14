@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Llave de firma fija (viene de los secrets del repo en GitHub Actions).
+// Sin ella se usa la llave debug, que cambia en cada compilación de CI.
+val signingKeystore: String? = System.getenv("SIGNING_KEYSTORE_PATH")
+
 android {
     namespace = "dev.charly.divisas"
     compileSdk = 37
@@ -16,13 +20,32 @@ android {
         versionName = "1.3"
     }
 
+    signingConfigs {
+        if (signingKeystore != null) {
+            create("release") {
+                storeFile = file(signingKeystore)
+                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
+        val signing = if (signingKeystore != null) signingConfigs.getByName("release")
+        else signingConfigs.getByName("debug")
+
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Firma con la llave debug para que el APK release se pueda instalar directo
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signing
+        }
+        debug {
+            // La debug se instala aparte ("Divisas debug") para no chocar con la release
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            signingConfig = signing
         }
     }
 

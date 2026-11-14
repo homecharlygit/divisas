@@ -15,12 +15,22 @@ adb shell am start -W -n dev.charly.divisas.debug/dev.charly.divisas.MainActivit
 sleep 25
 adb shell pidof dev.charly.divisas.debug && echo "DEBUG SIGUE ABIERTA" || echo "DEBUG SE CERRO"
 
-echo "===== Widget (release) ====="
-adb logcat -c
-adb shell am broadcast -a android.appwidget.action.APPWIDGET_UPDATE \
-  -n dev.charly.divisas/.widget.RateWidgetReceiver --eia appWidgetIds 1
-sleep 45
-adb logcat -d | grep -iE "glance|WM-|work|RateWidget|divisas|AndroidRuntime|FATAL|Exception" | grep -viE "chatty|ActivityTaskManager: Displayed" | tail -150
+adb root
+sleep 5
+adb wait-for-device
+for pkg in dev.charly.divisas dev.charly.divisas.debug; do
+  echo "===== Widget ($pkg) ====="
+  adb shell am start -W -n $pkg/dev.charly.divisas.MainActivity > /dev/null
+  sleep 5
+  adb logcat -c
+  adb shell am broadcast -a android.appwidget.action.APPWIDGET_UPDATE \
+    -n $pkg/dev.charly.divisas.widget.RateWidgetReceiver --eia appWidgetIds 1
+  sleep 30
+  PID=$(adb shell pidof $pkg)
+  echo "pid=$PID"
+  if [ -n "$PID" ]; then adb logcat -d --pid=$PID | tail -60; fi
+  adb logcat -d | grep -E "GlanceAppWidget|Glance|AppWidget|RemoteViews" | grep -v "chatty" | tail -40
+done
 
 echo "===== CRASH BUFFER ====="
 adb logcat -d -b crash

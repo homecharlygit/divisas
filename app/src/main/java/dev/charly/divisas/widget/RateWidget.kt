@@ -2,6 +2,12 @@ package dev.charly.divisas.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -46,12 +52,6 @@ class RateWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = RatesRepository(context)
-        var rates = repo.cached()
-        // Si el dato tiene más de una hora, intenta bajar uno nuevo
-        if (rates == null || System.currentTimeMillis() - repo.lastFetchMillis() > 60 * 60 * 1000L) {
-            runCatching { repo.fetch() }.getOrNull()?.let { rates = it }
-        }
-
         val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
         val from = prefs.getString("from", null) ?: "USD"
         val to = prefs.getString("to", null) ?: "MXN"
@@ -59,19 +59,30 @@ class RateWidget : GlanceAppWidget() {
         val str = stringsFor(lang)
         val locale = lang.locale
 
-        val r = rates
-        val value = r?.rates?.let { m -> m[from]?.let { f -> m[to]?.let { t -> t / f } } }
-        val rateText = value?.let {
-            NumberFormat.getNumberInstance(locale).apply {
-                minimumFractionDigits = 2
-                maximumFractionDigits = if (it >= 1) 2 else 4
-            }.format(it)
-        } ?: "—"
-        val time = repo.lastFetchMillis().takeIf { it > 0 }?.let {
-            DateTimeFormatter.ofPattern("HH:mm", locale).format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))
-        } ?: ""
-
         provideContent {
+            // Dibuja al instante con lo guardado y actualiza en segundo plano si es viejo
+            var rates by remember { mutableStateOf(repo.cached()) }
+            var fetchedAt by remember { mutableLongStateOf(repo.lastFetchMillis()) }
+            LaunchedEffect(Unit) {
+                if (rates == null || System.currentTimeMillis() - fetchedAt > 60 * 60 * 1000L) {
+                    runCatching { repo.fetch() }.getOrNull()?.let {
+                        rates = it
+                        fetchedAt = repo.lastFetchMillis()
+                    }
+                }
+            }
+
+            val value = rates?.rates?.let { m -> m[from]?.let { f -> m[to]?.let { t -> t / f } } }
+            val rateText = value?.let {
+                NumberFormat.getNumberInstance(locale).apply {
+                    minimumFractionDigits = 2
+                    maximumFractionDigits = if (it >= 1) 2 else 4
+                }.format(it)
+            } ?: "—"
+            val time = fetchedAt.takeIf { it > 0 }?.let {
+                DateTimeFormatter.ofPattern("HH:mm", locale).format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))
+            } ?: ""
+
             GlanceTheme {
                 WidgetContent(
                     pair = "${flag(from)} $from → ${flag(to)} $to",

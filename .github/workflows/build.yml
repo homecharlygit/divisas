@@ -16,8 +16,8 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      # Instala el SDK y acepta licencias; AGP baja solo la plataforma 37 y build-tools
-      - uses: android-actions/setup-android@v3
+      # El runner ya trae el Android SDK con licencias aceptadas;
+      # AGP baja solo la plataforma 37 y las build-tools que falten.
 
       - uses: gradle/actions/setup-gradle@v4
 

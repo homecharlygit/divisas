@@ -31,8 +31,14 @@ object Motion {
 
 /** Escala que se "aplasta" al presionar y rebota al soltar. */
 @Composable
-fun rememberPressScale(source: MutableInteractionSource, pressedScale: Float = 0.9f): Float {
+fun rememberPressScale(
+    source: MutableInteractionSource,
+    pressedScale: Float = 0.9f,
+    haptic: Boolean = true,
+): Float {
     val pressed by source.collectIsPressedAsState()
+    val haptics = LocalHaptics.current
+    LaunchedEffect(pressed) { if (pressed && haptic) haptics.press() }
     val scale by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,
         animationSpec = Motion.bouncy(),
@@ -63,7 +69,7 @@ fun Modifier.staggeredEnter(index: Int, enabled: Boolean = true): Modifier {
 
 /** Número que "rueda" con resorte hasta su nuevo valor. */
 @Composable
-fun animatedNumber(target: Double): Double {
+fun animatedNumber(target: Double, onRoll: ((remaining: Float) -> Unit)? = null): Double {
     val progress = remember { Animatable(1f) }
     var from by remember { mutableDoubleStateOf(target) }
     var to by remember { mutableDoubleStateOf(target) }
@@ -72,7 +78,15 @@ fun animatedNumber(target: Double): Double {
             from += (to - from) * progress.value
             to = target
             progress.snapTo(0f)
-            progress.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow))
+            var lastStep = 0
+            progress.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow)) {
+                // 10 "dientes" por animación: el tick se va apagando conforme el número frena
+                val step = (value * 10).toInt()
+                if (step != lastStep && value < 1f) {
+                    lastStep = step
+                    onRoll?.invoke(1f - value)
+                }
+            }
         }
     }
     return from + (to - from) * progress.value

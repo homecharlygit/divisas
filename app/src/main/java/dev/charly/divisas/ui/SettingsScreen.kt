@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -70,6 +71,7 @@ import dev.charly.divisas.ui.theme.PALETTE_DYNAMIC
 import dev.charly.divisas.ui.theme.PALETTE_HUES
 import dev.charly.divisas.ui.theme.supportsDynamicColor
 import dev.charly.divisas.ui.theme.swatchColor
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -78,6 +80,7 @@ fun SettingsScreen(vm: ConverterViewModel, onBack: () -> Unit) {
     val st = vm.settings
     val colors = MaterialTheme.colorScheme
     val context = LocalContext.current
+    val haptics = LocalHaptics.current
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -135,7 +138,7 @@ fun SettingsScreen(vm: ConverterViewModel, onBack: () -> Unit) {
                                         sample = if (index == PALETTE_DYNAMIC) colors.primary else swatchColor(PALETTE_HUES[index], st.dark),
                                         label = name,
                                         selected = st.palette == index,
-                                        onClick = { vm.setPalette(index) },
+                                        onClick = { haptics.select(); vm.setPalette(index) },
                                         modifier = Modifier.weight(1f),
                                     )
                                 }
@@ -153,7 +156,7 @@ fun SettingsScreen(vm: ConverterViewModel, onBack: () -> Unit) {
                 val source = remember { MutableInteractionSource() }
                 val press = rememberPressScale(source, 0.96f)
                 Surface(
-                    onClick = { vm.setDark(!st.dark) },
+                    onClick = { haptics.toggle(!st.dark); vm.setDark(!st.dark) },
                     interactionSource = source,
                     shape = RoundedCornerShape(28.dp),
                     color = colors.surfaceContainer,
@@ -193,7 +196,7 @@ fun SettingsScreen(vm: ConverterViewModel, onBack: () -> Unit) {
                         }
                         Switch(
                             checked = st.dark,
-                            onCheckedChange = { vm.setDark(it) },
+                            onCheckedChange = { haptics.toggle(it); vm.setDark(it) },
                             thumbContent = {
                                 Icon(
                                     painterResource(if (st.dark) R.drawable.ic_dark_mode else R.drawable.ic_check),
@@ -202,6 +205,99 @@ fun SettingsScreen(vm: ConverterViewModel, onBack: () -> Unit) {
                                 )
                             },
                         )
+                    }
+                }
+            }
+
+            // ---------- Respuesta háptica ----------
+            item { SectionHeader(str.haptics, Modifier.staggeredEnter(4)) }
+            item {
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = colors.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth().staggeredEnter(5),
+                ) {
+                    Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val tilt by animateFloatAsState(if (st.haptics) 0f else -25f, Motion.wobbly(), label = "tilt")
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .graphicsLayer { rotationZ = tilt }
+                                    .clip(MaterialShapes.Cookie6Sided.toShape())
+                                    .background(colors.secondaryContainer),
+                            ) {
+                                Icon(
+                                    painterResource(R.drawable.ic_vibration),
+                                    contentDescription = null,
+                                    tint = colors.onSecondaryContainer,
+                                )
+                            }
+                            Spacer(Modifier.width(16.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(str.haptics, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text(str.hapticsDesc, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                            }
+                            Switch(
+                                checked = st.haptics,
+                                onCheckedChange = { on ->
+                                    if (on) {
+                                        vm.setHaptics(true)
+                                        haptics.enabled = true
+                                        haptics.success()
+                                    } else {
+                                        haptics.fall()
+                                        vm.setHaptics(false)
+                                    }
+                                },
+                                thumbContent = {
+                                    Icon(
+                                        painterResource(if (st.haptics) R.drawable.ic_vibration else R.drawable.ic_check),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize),
+                                    )
+                                },
+                            )
+                        }
+                        androidx.compose.animation.AnimatedVisibility(visible = st.haptics) {
+                            Column(Modifier.padding(top = 16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        str.intensity,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        "${(st.hapticStrength * 100).roundToInt()}%",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.primary,
+                                    )
+                                }
+                                // Cada paso del slider vibra con la nueva intensidad para que la sientas
+                                Slider(
+                                    value = st.hapticStrength,
+                                    onValueChange = { v ->
+                                        val stepped = (v * 10).roundToInt() / 10f
+                                        if (stepped != st.hapticStrength) {
+                                            vm.setHapticStrength(stepped)
+                                            haptics.intensity = stepped
+                                            haptics.click(1f)
+                                        }
+                                    },
+                                    valueRange = 0.1f..1f,
+                                    steps = 8,
+                                )
+                                if (!haptics.rich) {
+                                    Text(
+                                        str.hapticsBasic,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.error,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -228,7 +324,7 @@ fun SettingsScreen(vm: ConverterViewModel, onBack: () -> Unit) {
                         selected = st.blur == type,
                         index = i,
                         count = blurOptions.size,
-                        onClick = { vm.setBlur(type) },
+                        onClick = { haptics.spin(); vm.setBlur(type) },
                         modifier = Modifier.staggeredEnter(6 + i).padding(bottom = 3.dp),
                     )
                 }
@@ -266,7 +362,7 @@ fun SettingsScreen(vm: ConverterViewModel, onBack: () -> Unit) {
                         selected = st.language == lang,
                         index = i,
                         count = AppLanguage.entries.size,
-                        onClick = { vm.setLanguage(lang) },
+                        onClick = { haptics.select(); vm.setLanguage(lang) },
                         modifier = Modifier.staggeredEnter(10 + i).padding(bottom = 3.dp),
                     )
                 }

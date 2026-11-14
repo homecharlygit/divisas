@@ -21,6 +21,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -37,14 +42,30 @@ enum class Screen { HOME, SETTINGS, ABOUT }
 @Composable
 fun AppRoot(vm: ConverterViewModel) {
     val settings = vm.settings
+    val context = LocalContext.current
+    val view = LocalView.current
+    val haptics = remember { Haptics(context, view) }
+    SideEffect {
+        haptics.enabled = settings.haptics
+        haptics.intensity = settings.hapticStrength
+    }
     CompositionLocalProvider(
         LocalStrings provides stringsFor(settings.language),
         LocalAppLocale provides settings.language.locale,
         LocalBlurType provides settings.blur,
+        LocalHaptics provides haptics,
     ) {
         DivisasTheme(palette = settings.palette, dark = settings.dark) {
             var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
             BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
+            // Avanzar se siente como "subir" y regresar como "bajar"
+            var previous by remember { mutableStateOf(screen) }
+            LaunchedEffect(screen) {
+                if (screen != previous) {
+                    if (screen.ordinal > previous.ordinal) haptics.rise() else haptics.fall()
+                    previous = screen
+                }
+            }
 
             Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
                 AnimatedContent(

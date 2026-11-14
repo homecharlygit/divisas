@@ -13,6 +13,7 @@ Conversor de divisas para Android con tipo de cambio actualizado, hecho en Kotli
 - **Color del tema:** 8 paletas (generadas en tonos tipo HCT a partir de un hue) + colores del wallpaper en Android 12+. El cambio de color se anima en toda la app.
 - **Modo oscuro:** activado por defecto.
 - **Desenfoque:** Dual Kawase (default, shaders AGSL propios, Android 13+) o Gaussiano (`RenderEffect`, Android 12+). Se aplica detrás del menú y del selector de monedas, y en las transiciones entre pantallas. Incluye vista previa.
+- **Respuesta háptica:** vibraciones dinámicas con primitivas de `VibrationEffect.Composition` (Android 11+), con switch e intensidad ajustable; en equipos sin soporte usa los haptics básicos del sistema.
 - **Idioma:** Español (default), English y Português (Brasil). También cambia el formato de números, fechas y nombres de monedas.
 
 ## Acerca de

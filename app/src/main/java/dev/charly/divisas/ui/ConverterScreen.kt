@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -62,6 +63,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -79,6 +81,7 @@ import dev.charly.divisas.ui.i18n.LocalAppLocale
 import dev.charly.divisas.ui.i18n.LocalStrings
 import dev.charly.divisas.ui.i18n.Strings
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.text.Normalizer
 import java.text.NumberFormat
@@ -99,6 +102,15 @@ fun ConverterScreen(
 ) {
     val s = vm.state
     val str = LocalStrings.current
+    val haptics = LocalHaptics.current
+    // Al terminar una actualización pedida por el usuario: éxito o error se sienten distinto
+    var awaitingRefresh by remember { mutableStateOf(false) }
+    LaunchedEffect(s.loading) {
+        if (!s.loading && awaitingRefresh) {
+            awaitingRefresh = false
+            if (s.offline || s.rates == null) haptics.error() else haptics.success()
+        }
+    }
     val locale = LocalAppLocale.current
     var picking by rememberSaveable { mutableStateOf<Side?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
@@ -124,7 +136,15 @@ fun ConverterScreen(
             LargeTopAppBar(
                 title = { Text(str.appTitle, fontWeight = FontWeight.Bold) },
                 actions = {
-                    RefreshAction(loading = s.loading, label = str.refresh, onClick = vm::refresh)
+                    RefreshAction(
+                        loading = s.loading,
+                        label = str.refresh,
+                        onClick = {
+                            awaitingRefresh = true
+                            haptics.click(0.6f)
+                            vm.refresh()
+                        },
+                    )
                     OverflowMenu(
                         str = str,
                         open = menuOpen,
@@ -152,9 +172,12 @@ fun ConverterScreen(
                     s = s,
                     str = str,
                     locale = locale,
-                    onAmount = vm::setAmount,
-                    onPickFrom = { picking = Side.FROM },
-                    onPickTo = { picking = Side.TO },
+                    onAmount = { new ->
+                        haptics.key(deleting = new.length < s.amount.length)
+                        vm.setAmount(new)
+                    },
+                    onPickFrom = { haptics.rise(0.5f); picking = Side.FROM },
+                    onPickTo = { haptics.rise(0.5f); picking = Side.TO },
                     onSwap = vm::swap,
                     modifier = Modifier.staggeredEnter(0, intro),
                 )
@@ -202,7 +225,7 @@ fun ConverterScreen(
                         val scale by animateFloatAsState(if (selected) 1.1f else 1f, Motion.wobbly(), label = "chip")
                         FilterChip(
                             selected = selected,
-                            onClick = { vm.setTo(code) },
+                            onClick = { haptics.select(); vm.setTo(code) },
                             label = { Text("${flag(code)}  $code", fontWeight = FontWeight.SemiBold) },
                             modifier = Modifier
                                 .animateItem(placementSpec = Motion.bouncy())
@@ -237,7 +260,7 @@ fun ConverterScreen(
                     name = currencyName(code, locale),
                     value = fmt(s.convert(n, s.from, code), locale),
                     shape = segmentShape(i, others.size),
-                    onClick = { vm.setTo(code) },
+                    onClick = { haptics.select(); vm.setTo(code) },
                     modifier = Modifier
                         .animateItem(
                             fadeInSpec = Motion.snappy(),
@@ -257,7 +280,10 @@ fun ConverterScreen(
             selected = if (side == Side.FROM) s.from else s.to,
             str = str,
             locale = locale,
-            onPick = { if (side == Side.FROM) vm.setFrom(it) else vm.setTo(it) },
+            onPick = {
+                haptics.select()
+                if (side == Side.FROM) vm.setFrom(it) else vm.setTo(it)
+            },
             onDismiss = { picking = null },
         )
     }
@@ -301,9 +327,10 @@ private fun OverflowMenu(
     onSettings: () -> Unit,
     onAbout: () -> Unit,
 ) {
+    val haptics = LocalHaptics.current
     val turn by animateFloatAsState(if (open) 90f else 0f, Motion.wobbly(), label = "menuIcon")
     Box {
-        IconButton(onClick = { onOpenChange(true) }) {
+        IconButton(onClick = { haptics.rise(0.5f); onOpenChange(true) }) {
             Icon(
                 painterResource(R.drawable.ic_more_vert),
                 contentDescription = str.moreOptions,
@@ -318,12 +345,12 @@ private fun OverflowMenu(
             DropdownMenuItem(
                 text = { Text(str.settings) },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_settings), contentDescription = null) },
-                onClick = { onOpenChange(false); onSettings() },
+                onClick = { haptics.click(0.7f); onOpenChange(false); onSettings() },
             )
             DropdownMenuItem(
                 text = { Text(str.about) },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_info), contentDescription = null) },
-                onClick = { onOpenChange(false); onAbout() },
+                onClick = { haptics.click(0.7f); onOpenChange(false); onAbout() },
             )
         }
     }
@@ -341,6 +368,7 @@ private fun ConverterCards(
     onSwap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = LocalHaptics.current
     val colors = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
     val rotation = remember { Animatable(0f) }
@@ -392,7 +420,7 @@ private fun ConverterCards(
                         CurrencyButton(s.to, upward = true, onClick = onPickTo)
                         Spacer(Modifier.width(12.dp))
                         val result = s.convert(s.amountValue, s.from, s.to)
-                        val shown = animatedNumber(result ?: 0.0)
+                        val shown = animatedNumber(result ?: 0.0) { remaining -> haptics.roll(remaining) }
                         Text(
                             text = if (result == null) "—" else fmt(shown, locale),
                             style = MaterialTheme.typography.displaySmall,
@@ -411,6 +439,7 @@ private fun ConverterCards(
         // Botón de intercambio: galleta de MaterialShapes que gira, "explota" y empuja las tarjetas
         Surface(
             onClick = {
+                haptics.swap()
                 onSwap()
                 scope.launch { rotation.animateTo(rotation.targetValue + 180f, Motion.wobbly()) }
                 scope.launch { pop.snapTo(1.35f); pop.animateTo(1f, Motion.wobbly()) }
@@ -558,6 +587,7 @@ private fun CurrencyPicker(
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val haptics = LocalHaptics.current
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
@@ -577,7 +607,17 @@ private fun CurrencyPicker(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         )
         Spacer(Modifier.height(12.dp))
-        LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
+        val listState = rememberLazyListState()
+        // Cada moneda que pasa al deslizar se siente como un "diente" de rueda
+        LaunchedEffect(listState) {
+            snapshotFlow { listState.firstVisibleItemIndex }
+                .drop(1)
+                .collect { haptics.tick(0.3f) }
+        }
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
+        ) {
             if (filtered.isEmpty()) {
                 item {
                     Text(

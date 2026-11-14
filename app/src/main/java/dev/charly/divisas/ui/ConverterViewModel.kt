@@ -45,6 +45,8 @@ data class AppSettings(
     val dark: Boolean,
     val language: AppLanguage,
     val blur: BlurType,
+    val haptics: Boolean,
+    val hapticStrength: Float,
 )
 
 val FAVORITES = listOf("MXN", "USD", "EUR", "CAD", "GBP", "JPY", "CNY", "BRL", "COP", "ARS")
@@ -70,6 +72,8 @@ class ConverterViewModel(app: Application) : AndroidViewModel(app) {
             dark = prefs.getBoolean("dark", true), // oscuro por defecto
             language = AppLanguage.from(prefs.getString("lang", null)),
             blur = BlurType.from(prefs.getString("blur", null)), // Kawase por defecto
+            haptics = prefs.getBoolean("haptics", true),
+            hapticStrength = prefs.getFloat("hapticStrength", 0.7f),
         )
     )
         private set
@@ -87,6 +91,16 @@ class ConverterViewModel(app: Application) : AndroidViewModel(app) {
     fun setLanguage(lang: AppLanguage) {
         settings = settings.copy(language = lang)
         prefs.edit().putString("lang", lang.code).apply()
+    }
+
+    fun setHaptics(on: Boolean) {
+        settings = settings.copy(haptics = on)
+        prefs.edit().putBoolean("haptics", on).apply()
+    }
+
+    fun setHapticStrength(value: Float) {
+        settings = settings.copy(hapticStrength = value)
+        prefs.edit().putFloat("hapticStrength", value).apply()
     }
 
     fun setBlur(type: BlurType) {

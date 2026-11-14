@@ -214,12 +214,14 @@ private fun AppBadge() {
         animationSpec = infiniteRepeatable(tween(20_000, easing = LinearEasing), RepeatMode.Restart),
         label = "spin",
     )
+    val haptics = LocalHaptics.current
     val scope = rememberCoroutineScope()
     val pop = remember { Animatable(1f) }
     val extra = remember { Animatable(0f) }
 
     Surface(
         onClick = {
+            haptics.spin()
             scope.launch { pop.snapTo(0.7f); pop.animateTo(1f, Motion.wobbly()) }
             scope.launch { extra.animateTo(extra.targetValue + 180f, Motion.wobbly()) }
         },

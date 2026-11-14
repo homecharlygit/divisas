@@ -63,7 +63,7 @@ import dev.charly.divisas.ui.theme.PALETTE_HUES
 import dev.charly.divisas.ui.theme.supportsDynamicColor
 import dev.charly.divisas.ui.theme.swatchColor
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsScreen(vm: ConverterViewModel, onBack: () -> Unit) {
     val str = LocalStrings.current
@@ -257,7 +257,7 @@ private fun Swatch(
                     .clip(cookie)
                     .background(fill)
             )
-            AnimatedVisibility(
+            androidx.compose.animation.AnimatedVisibility(
                 visible = selected,
                 enter = scaleIn(Motion.wobbly(), initialScale = 0f) + fadeIn(),
                 exit = scaleOut(targetScale = 0f) + fadeOut(),
